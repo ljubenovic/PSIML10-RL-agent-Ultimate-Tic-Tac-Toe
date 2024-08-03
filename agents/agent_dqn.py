@@ -75,10 +75,6 @@ class DQNetwork(torch.nn.Module):
             torch.nn.Linear(81, n_actions),
             torch.nn.Tanh()
         )
-        """torch.nn.Linear(128, 64),
-            torch.nn.ReLU(),
-            torch.nn.Linear(64, 32),
-            torch.nn.ReLU(),"""
         self.optimizer = torch.optim.Adam(self.parameters(), lr = learning_rate)
         self.loss = torch.nn.MSELoss(reduction='mean')
         self.to(self.device)
@@ -117,9 +113,9 @@ class DQNAgent(Agent):
         self.batch_size = batch_size   # batch size hyperparameter for neural network
         self.state_len = state_len     # how long the state vector is
         self.n_actions = n_actions     # number of actions the agent can take
-        self.epsilon = epsilon         # epsilon start value (1=completly random)
+        self.epsilon_start = epsilon   # epsilon start value (1=completly random)
+        self.epsilon = epsilon
         self.epsilon_min = epsilon_min # the minimum value
-        self.epsilon_dec = epsilon_dec
         self.mem_size = mem_size
 
         with open('parameters.csv', 'a', newline='') as csvfile:
@@ -177,7 +173,6 @@ class DQNAgent(Agent):
             # akcija koja maksimizira Q vrednost
             return self.getAction(env, observation, check_validity, flag_x)
 
-
     def learn(self, error):
         
         # proverava se da li je prikupljeno dovoljno iskustva da se zapocne trening
@@ -209,21 +204,14 @@ class DQNAgent(Agent):
         loss.backward()  # Compute gradients
         self.q.optimizer.step()  # Backpropagate error
 
-        """# decrease epsilon:
-        if error == 0:
-            # epsilon se smanjuje (veca eksploatacija)
-            if self.epsilon * self.epsilon_dec > self.epsilon_min:
-                self.epsilon *= self.epsilon_dec
-        else:
-            # epsilon se povecava (veca eksploracija)
-            if self.epsilon / self.epsilon_dec <= 1:
-                self.epsilon /= self.epsilon_dec"""
-
         self.it_counter += 1
         
         return loss.item()
 
-
+    def linear_schedule(start_e: float, end_e: float, duration: int, t: int):
+        slope = (end_e - start_e) / duration
+        return max(slope * t + start_e, end_e)
+    
     def learnNN(self, env, masked = True, n_episodes = 1000, n_save = 500, trainingName = ""):
         l_epsilon = []
         l_win = []
@@ -240,7 +228,8 @@ class DQNAgent(Agent):
             done = 0
             
             flag_x = ((episode % 2)==0)
-
+            self.epsilon = linear_schedule(self.epsilon_start, self.epsilon_min, n_episodes, episode)
+            
             while not done: # while the episode is not over yet
                 action = None
                 if masked:
@@ -257,6 +246,7 @@ class DQNAgent(Agent):
 
                 self.replay_buffer.store_transition(processObs(state), action, reward, processObs(new_state), done, flag_x)   # store timestep for experiene replay
                 loss_tmp = self.learn(error)   # the agent learns after each timestep
+                
                 if loss_tmp:
                     loss_arr.append(loss_tmp)
                 state = new_state
