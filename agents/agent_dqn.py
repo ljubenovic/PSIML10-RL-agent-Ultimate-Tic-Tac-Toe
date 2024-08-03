@@ -208,9 +208,9 @@ class DQNAgent(Agent):
         
         return loss.item()
 
-    def linear_schedule(start_e: float, end_e: float, duration: int, t: int):
-        slope = (end_e - start_e) / duration
-        return max(slope * t + start_e, end_e)
+    def linear_schedule(self, epsilon_start, epsilon_min, n_episodes, episode):
+        slope = (epsilon_min - epsilon_start) / n_episodes
+        return max(slope * episode + epsilon_start, epsilon_min)
     
     def learnNN(self, env, masked = True, n_episodes = 1000, n_save = 500, trainingName = ""):
         l_epsilon = []
