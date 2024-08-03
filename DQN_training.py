@@ -5,8 +5,8 @@ if __name__ == '__main__':
     
     env = TwoPlayerEnv()
 
-    epsilon = 0.2
-    n_episodes = 50000
+    epsilon = 0.3
+    n_episodes = 15000
     n_save = 500
 
     name = '_train'
