@@ -63,13 +63,11 @@ class DQNetwork(torch.nn.Module):
         self.learning_rate = learning_rate
         self.n_actions = n_actions
         self.network = torch.nn.Sequential(
-            torch.nn.Linear(state_len, 128),
+            torch.nn.Linear(state_len, 256),
             torch.nn.LeakyReLU(negative_slope=0.01),
-            torch.nn.Linear(128, 64),
+            torch.nn.Linear(256, 128),
             torch.nn.LeakyReLU(negative_slope=0.01),
-            torch.nn.Linear(64, 32),
-            torch.nn.LeakyReLU(negative_slope=0.01),
-            torch.nn.Linear(32, n_actions),
+            torch.nn.Linear(128, n_actions),
             torch.nn.Tanh()
         )
         self.optimizer = torch.optim.Adam(self.parameters(), lr = learning_rate)
@@ -91,16 +89,14 @@ class DQNAgent(Agent):
 
     def __init__(self, env, epsilon, loading=True, masked = True, n_episodes = 1000, n_save = 500, name = "_train"):
 
-        learning_rate = 1e-5
+        learning_rate = 1e-6
         gamma = 0.99
         batch_size = 128
         state_len = 99  # (grid, largeGrid, possible)
         n_actions = env.action_space.n  # 81
         mem_size = 1000000
         min_memory_for_training = batch_size
-        
         epsilon = epsilon
-        epsilon_dec = 0.998
         epsilon_min = 0.01
 
         super().__init__(self)
@@ -119,7 +115,6 @@ class DQNAgent(Agent):
             csvwriter.writerow(['learning rate',learning_rate])
             csvwriter.writerow(['gamma',0.99])
             csvwriter.writerow(['epsilon',epsilon])
-            csvwriter.writerow(['epsilon dec',epsilon_dec])
             csvwriter.writerow(['epsilon min',epsilon_min])
             csvwriter.writerow(['batch size',batch_size])
             csvwriter.writerow(['mem size',mem_size])
@@ -135,7 +130,8 @@ class DQNAgent(Agent):
 
     def getAction(self, env, observation, check_validity, flag_x):
         observation = torch.tensor(processObs(observation), dtype = torch.float32).to(self.q.device)
-        q = self.q.forward(observation)
+        with torch.no_grad():
+            q = self.q(observation)
         if flag_x:
             action = int(torch.argmax(q))
         else:
@@ -186,7 +182,7 @@ class DQNAgent(Agent):
             chosen_q_values = torch.where(flags_batch, min_q_values, max_q_values)
             target = rewards_batch + torch.mul(self.gamma * chosen_q_values, (1 - dones_batch))
         # Estimacija
-        prediction = self.q.forward(states_batch).gather(1,actions_batch.unsqueeze(1)).squeeze(1)
+        prediction = self.q(states_batch).gather(1,actions_batch.unsqueeze(1)).squeeze(1)
         
         loss = self.q.loss(prediction, target)
         loss.backward()
@@ -198,14 +194,14 @@ class DQNAgent(Agent):
 
     def linear_schedule(self, epsilon_start, epsilon_min, n_episodes, episode):
         slope = (epsilon_min - epsilon_start) / n_episodes
-        return max(slope * episode + epsilon_start, epsilon_min)
+        epsilon = max(slope * episode + epsilon_start, epsilon_min)
+        #epsilon = self.epsilon_min + (self.epsilon_start - self.epsilon_min)*np.exp(-0.001*episode)
+        return epsilon
     
     def learnNN(self, env, masked = True, n_episodes = 1000, n_save = 500, trainingName = ""):
-        l_epsilon = []
-        l_win = []
+   
         loss_arr = []
         loss = []
-        sum_win = 0
 
         output_dir = 'loss_graphs'
         
@@ -215,11 +211,13 @@ class DQNAgent(Agent):
             score = 0
             done = 0
             
-            flag_x = ((episode % 2)==0)
             self.epsilon = self.linear_schedule(self.epsilon_start, self.epsilon_min, n_episodes, episode)
             
             while not done: # while the episode is not over yet
                 action = None
+                
+                flag_x = 3 - env.pygame.board.currentPlayer
+                
                 if masked:
                     action = self.pickActionMaybeRandom(env, state, True, flag_x)
 
@@ -232,7 +230,8 @@ class DQNAgent(Agent):
                 
                 score += reward #  the total score during this round
 
-                self.replay_buffer.store_transition(processObs(state), action, reward, processObs(new_state), done, flag_x)   # store timestep for experiene replay
+                self.replay_buffer.store_transition(processObs(state), action, reward, processObs(new_state), done, flag_x)
+                
                 loss_tmp = self.learn(error)   # the agent learns after each timestep
                 
                 if loss_tmp:
@@ -295,8 +294,11 @@ def DQN_vs_random(agent_DQN, env, n_episodes, is_DQN_first = True, file_path = '
 
         obs = env.reset()
         game = True
+
+        currentPlayer = 1
+        
         while game:
-            if env.pygame.board.currentPlayer == random_turn: # Random agent
+            if currentPlayer == random_turn: # Random agent
                 action = agent_random.getAction(env) # Take a random action
                 obs, reward, done, _ = env.step(action)
                 if done == True:
@@ -311,6 +313,7 @@ def DQN_vs_random(agent_DQN, env, n_episodes, is_DQN_first = True, file_path = '
                         print('ERROR!')
                 if done == True:
                     game = False
+            currentPlayer = 3-currentPlayer
 
         if env.pygame.board.state == random_turn:
             results[1] += 1
