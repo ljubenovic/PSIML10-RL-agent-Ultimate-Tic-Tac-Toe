@@ -67,15 +67,18 @@ class DQNetwork(torch.nn.Module):
         print(self.device)
         self.learning_rate = learning_rate
         self.n_actions = n_actions
-        n_nodes = 128
         self.network = torch.nn.Sequential(
-            torch.nn.Linear(state_len, n_nodes),
+            torch.nn.Linear(state_len, 81),
             torch.nn.ReLU(),
-            torch.nn.Linear(n_nodes, n_nodes),
+            torch.nn.Linear(81, 81),
             torch.nn.ReLU(),
-            torch.nn.Linear(n_nodes, n_actions),
+            torch.nn.Linear(81, n_actions),
             torch.nn.Tanh()
         )
+        """torch.nn.Linear(128, 64),
+            torch.nn.ReLU(),
+            torch.nn.Linear(64, 32),
+            torch.nn.ReLU(),"""
         self.optimizer = torch.optim.Adam(self.parameters(), lr = learning_rate)
         self.loss = torch.nn.MSELoss(reduction='mean')
         self.to(self.device)
@@ -95,7 +98,7 @@ class DQNAgent(Agent):
 
     def __init__(self, env, epsilon, loading=True, masked = True, n_episodes = 1000, n_save = 500, name = "_train"):
 
-        learning_rate = 0.00001
+        learning_rate = 1e-5
         gamma = 0.99
         batch_size = 128
         state_len = 99  # (grid, largeGrid, possible)
@@ -192,11 +195,12 @@ class DQNAgent(Agent):
         flags_batch = torch.tensor(flags, dtype= torch.bool).to(self.q.device)
 
         # Bellmmanova jednacina
-        q_values = self.q(new_states_batch)
-        max_q_values = q_values.max(axis=1).values
-        min_q_values = q_values.min(axis=1).values
-        chosen_q_values = torch.where(flags_batch, min_q_values, max_q_values)
-        target = rewards_batch + torch.mul(self.gamma * chosen_q_values, (1 - dones_batch))
+        with torch.no_grad():
+            q_values = self.q(new_states_batch)
+            max_q_values = q_values.max(axis=1).values
+            min_q_values = q_values.min(axis=1).values
+            chosen_q_values = torch.where(flags_batch, min_q_values, max_q_values)
+            target = rewards_batch + torch.mul(self.gamma * chosen_q_values, (1 - dones_batch))
 
         # Estimacija
         prediction = self.q.forward(states_batch).gather(1,actions_batch.unsqueeze(1)).squeeze(1)
@@ -205,7 +209,7 @@ class DQNAgent(Agent):
         loss.backward()  # Compute gradients
         self.q.optimizer.step()  # Backpropagate error
 
-        # decrease epsilon:
+        """# decrease epsilon:
         if error == 0:
             # epsilon se smanjuje (veca eksploatacija)
             if self.epsilon * self.epsilon_dec > self.epsilon_min:
@@ -213,7 +217,7 @@ class DQNAgent(Agent):
         else:
             # epsilon se povecava (veca eksploracija)
             if self.epsilon / self.epsilon_dec <= 1:
-                self.epsilon /= self.epsilon_dec
+                self.epsilon /= self.epsilon_dec"""
 
         self.it_counter += 1
         
@@ -248,6 +252,7 @@ class DQNAgent(Agent):
                     pass
                 else:
                     reward = -1*reward
+                
                 score += reward #  the total score during this round
 
                 self.replay_buffer.store_transition(processObs(state), action, reward, processObs(new_state), done, flag_x)   # store timestep for experiene replay
