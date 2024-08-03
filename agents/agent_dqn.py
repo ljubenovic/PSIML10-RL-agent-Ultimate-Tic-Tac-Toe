@@ -228,7 +228,7 @@ class DQNAgent(Agent):
             done = 0
             
             flag_x = ((episode % 2)==0)
-            self.epsilon = linear_schedule(self.epsilon_start, self.epsilon_min, n_episodes, episode)
+            self.epsilon = self.linear_schedule(self.epsilon_start, self.epsilon_min, n_episodes, episode)
             
             while not done: # while the episode is not over yet
                 action = None
