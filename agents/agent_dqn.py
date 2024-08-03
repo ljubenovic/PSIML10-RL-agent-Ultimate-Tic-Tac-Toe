@@ -35,8 +35,9 @@ class ReplayBuffer(object):
         self.rewards = np.zeros(mem_size, dtype=np.float32)
         self.new_states = np.zeros((mem_size, state_len), dtype=np.float32)
         self.dones = np.zeros(mem_size, dtype=np.int32)
+        self.flags = np.zeros(mem_size, dtype=np.bool)
 
-    def store_transition(self, state, action, reward, new_state, done):
+    def store_transition(self, state, action, reward, new_state, done, flag_x):
         index = self.mem_counter%self.mem_size
         self.states[index, :] = state
         self.actions[index] = action
@@ -44,6 +45,7 @@ class ReplayBuffer(object):
         self.new_states[index, :] = new_state
         self.dones[index] = done
         self.mem_counter += 1
+        self.flags[index] = flag_x
 
     def sample_memory(self, batch_size):
         max_memory = min(self.mem_size, self.mem_counter)
@@ -54,7 +56,8 @@ class ReplayBuffer(object):
         rewards = self.rewards[batch]
         new_states = self.new_states[batch, :]
         dones = self.dones[batch]
-        return states, actions, rewards, new_states, dones
+        flags = self.flags[batch]
+        return states, actions, rewards, new_states, dones, flags
 
 
 class DQNetwork(torch.nn.Module):
@@ -90,12 +93,11 @@ class DQNetwork(torch.nn.Module):
 
 class DQNAgent(Agent):
 
-    #def __init__(self, player = 1, env = gym.make('LunarLander-v2'), loading=True, name = ""):
     def __init__(self, env, epsilon, loading=True, masked = True, n_episodes = 1000, n_save = 500, name = "_train"):
 
-        learning_rate = 0.00005
+        learning_rate = 0.00001
         gamma = 0.99
-        batch_size = 64
+        batch_size = 128
         state_len = 99  # (grid, largeGrid, possible)
         n_actions = env.action_space.n  # 81
         mem_size = 1000000
@@ -137,10 +139,13 @@ class DQNAgent(Agent):
         else :
             self.learnNN(env, masked, n_episodes, n_save, name)
 
-    def getAction(self, env, observation, check_validity = True):
+    def getAction(self, env, observation, check_validity, flag_x):
         observation = torch.tensor(processObs(observation), dtype = torch.float32).to(self.q.device)
         q = self.q.forward(observation)
-        action = int(torch.argmax(q))
+        if flag_x:
+            action = int(torch.argmax(q))
+        else:
+            action = int(torch.argmin(q))
 
         if check_validity: # checks for action validity
 
@@ -152,26 +157,22 @@ class DQNAgent(Agent):
                 q_min = float(torch.min(q))
                 mask = torch.tensor([True if i in valid_actions else False for i in range(env.action_space.n)])
                 new_q = (q.detach() - q_min + 1.) *  mask
-                action = int(torch.argmax(new_q))
+                if flag_x:
+                    action = int(torch.argmax(new_q))
+                else:
+                    masked_q = torch.where(new_q != 0, new_q, float('inf'))
+                    action = int(torch.argmin(masked_q))
 
-        # value = q[action]
-        # print("picked action : ",action," reward : ", value)
         return action
 
-    def pickActionMaybeRandom(self, env, observation, check_validity = False):
+    def pickActionMaybeRandom(self, env, observation, check_validity, flag_x):
         if np.random.random() < self.epsilon:
             # nasumicna akcija
             valid_actions = env.valid_actions()
             return int(np.random.choice(valid_actions))
         else:
             # akcija koja maksimizira Q vrednost
-            return self.getAction(env, observation, check_validity)
-
-    """def pickActionMaybeMasked(self, env, observation):
-        if np.random.random() < self.epsilon:
-            return self.getAction(env, observation, True)
-        else:
-            return self.getAction(env, observation, False)"""
+            return self.getAction(env, observation, check_validity, flag_x)
 
 
     def learn(self, error):
@@ -180,18 +181,24 @@ class DQNAgent(Agent):
         if self.replay_buffer.mem_counter < self.min_memory_for_training:
             return
         # uzorkovanje nasumicnih iskustava iz buffer-a
-        states, actions, rewards, new_states, dones = self.replay_buffer.sample_memory(self.batch_size)
+        states, actions, rewards, new_states, dones, flags = self.replay_buffer.sample_memory(self.batch_size)
         
         self.q.optimizer.zero_grad()
         states_batch = torch.tensor(states, dtype = torch.float32).to(self.q.device)
-        new_states_batch = torch.tensor(new_states,dtype = torch.float32).to(self.q.device)
+        new_states_batch = torch.tensor(new_states, dtype = torch.float32).to(self.q.device)
         actions_batch = torch.tensor(actions, dtype = torch.long).to(self.q.device)
         rewards_batch = torch.tensor(rewards, dtype = torch.float32).to(self.q.device)
         dones_batch = torch.tensor(dones, dtype = torch.float32).to(self.q.device)
+        flags_batch = torch.tensor(flags, dtype= torch.bool).to(self.q.device)
 
-        # Bellmmanova jednacina za racunanje ciljne vrednosti Q
-        target = rewards_batch + torch.mul(self.gamma* self.q(new_states_batch).max(axis = 1).values, (1 - dones_batch))
-        # Estimacija trenutne Q vrednosti
+        # Bellmmanova jednacina
+        q_values = self.q(new_states_batch)
+        max_q_values = q_values.max(axis=1).values
+        min_q_values = q_values.min(axis=1).values
+        chosen_q_values = torch.where(flags_batch, min_q_values, max_q_values)
+        target = rewards_batch + torch.mul(self.gamma * chosen_q_values, (1 - dones_batch))
+
+        # Estimacija
         prediction = self.q.forward(states_batch).gather(1,actions_batch.unsqueeze(1)).squeeze(1)
         
         loss = self.q.loss(prediction, target) # TD error
@@ -228,19 +235,22 @@ class DQNAgent(Agent):
             score = 0
             done = 0
             
+            flag_x = ((episode % 2)==0)
+
             while not done: # while the episode is not over yet
                 action = None
                 if masked:
-                    #action = self.getAction(env, state, True)
-                    action = self.pickActionMaybeRandom(env, state, True)
-                """else:
-                    action = self.pickActionMaybeMasked(env,state)  # let the agent act"""
+                    action = self.pickActionMaybeRandom(env, state, True, flag_x)
 
                 new_state, reward, done, error = env.step(action) # performing the action in the environment
                 
+                if flag_x:
+                    pass
+                else:
+                    reward = -1*reward
                 score += reward #  the total score during this round
 
-                self.replay_buffer.store_transition(processObs(state), action, reward, processObs(new_state), done)   # store timestep for experiene replay
+                self.replay_buffer.store_transition(processObs(state), action, reward, processObs(new_state), done, flag_x)   # store timestep for experiene replay
                 loss_tmp = self.learn(error)   # the agent learns after each timestep
                 if loss_tmp:
                     loss_arr.append(loss_tmp)
@@ -313,10 +323,7 @@ def DQN_vs_random(agent_DQN, env, n_episodes, is_DQN_first = True, file_path = '
 
     results = [0, 0, 0]
 
-    for i in range(n_episodes):
-
-        """if (i % 100) == 0:
-            print('episode: ',i)"""
+    for _ in range(n_episodes):
 
         obs = env.reset()
 
@@ -326,18 +333,20 @@ def DQN_vs_random(agent_DQN, env, n_episodes, is_DQN_first = True, file_path = '
             if env.pygame.board.currentPlayer == random_turn: # Random agent
                 
                 action = agent_random.getAction(env) # Take a random action
-                obs, reward, done, info = env.step(action)
+                obs, reward, done, _ = env.step(action)
                 if done == True:
                     game = False
 
             else: # DQN agent
-                action = agent_DQN.getAction(env, obs, True)
+                action = agent_DQN.getAction(env, obs, True, is_DQN_first)
 
                 if action < 0:  # If the aciton is negative this means that the agent asks to close the game
                     done = True
 
                 elif action < 81:   # Otherwise, if the action is valid we play it in the env
                     obs, reward, done, info = env.step(action)
+                    if reward == -100:
+                        print('ERROR!')
                 if done == True:
                     game = False
 
