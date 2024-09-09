@@ -1,6 +1,6 @@
 import time
 import numpy as np
-import pygame
+#import pygame
 
 
 def current_milli_time():
@@ -28,45 +28,7 @@ class Reward:
         INPUT: reward of the move
         NO OUTPUT -> updates self.reward
         '''
-        if self.board.currentPlayer == 1:
-            self.value += reward
-        else:
-            self.value -= 1 * reward
-
-    def update_playing_on(self, large_index, grid_index):
-        '''
-        Updates the reward playing in the given cell
-        INPUT: ixLarge, iyLarge, ixSmall, iySmall (indexes of the small cell)
-        NO OUTPUT -> updates self.reward
-        '''
-        # SUPER-SIMPLE REWARD
-        if self.mode == 0:
-            pass # No reward
-
-        # SIMPLE REWARD
-        elif self.mode == 1:
-            pass # No reward
-
-        # COMPLEX REWARD
-        elif self.mode == 2:
-            valueLargeGrid_prev = Board.gridValue(self.board.largeGrid)
-            self.board.largeGrid[large_index] = self.board.currentPlayer
-            valueLargeGrid = Board.gridValue(self.board.largeGrid)
-            self.board.largeGrid[large_index] = 0
-
-            valueSmallGrid = Board.gridValue(self.board.grid, large_index*9)
-            self.board.grid[grid_index] = 0
-            valueSmallGrid_prev = Board.gridValue(self.board.grid, large_index*9)
-            self.board.grid[grid_index] = self.board.currentPlayer
-
-            reward = abs((valueSmallGrid - valueSmallGrid_prev) * (valueLargeGrid - valueLargeGrid_prev))
-            self.update(reward)
-
-        # ERROR
-        else:
-            print("Error mode in Reward.update_playing_on")
-
-
+        self.value += reward
 
     def update_winning_large_cell(self, large_index):
         '''
@@ -76,29 +38,11 @@ class Reward:
         '''
         self.reset()
 
-        # SUPER-SIMPLE REWARD
-        if self.mode == 0:
-            pass # No reward
-
         # SIMPLE REWARD
-        elif self.mode == 1:
+        if self.mode == 1:
             self.update(0.1)
-
-        # COMPLEX REWARD
-        elif self.mode == 2:
-            valueLargeGrid = Board.gridValue(self.board.largeGrid)
-            self.board.largeGrid[large_index] = 0
-            valueLargeGrid_prev = Board.gridValue(self.board.largeGrid)
-            self.board.largeGrid[large_index] = self.board.currentPlayer
-
-            reward = abs(20 * (valueLargeGrid - valueLargeGrid_prev))
-            self.update(reward)
-
-        # ERROR
         else:
             print("Error mode in Reward.update_winning_large_cell")
-
-
 
     def update_winning(self):
         '''
@@ -108,24 +52,11 @@ class Reward:
         '''
         self.reset()
 
-        # SUPER-SIMPLE REWARD
-        if self.mode == 0:
-            self.update(1)
-
         # SIMPLE REWARD
-        elif self.mode == 1:
+        if self.mode == 1:
             self.update(1)
-
-        # COMPLEX REWARD
-        elif self.mode == 2:
-            self.update(400)
-
-        # ERROR
         else:
             print("Error mode in Reward.update_winning_large_cell")
-
-
-
 
 
 class Board:
@@ -360,7 +291,7 @@ class Board:
     def __init__(self):
         '''Constructor (automatically reset on construct)'''
         self.reward = Reward(self)
-        Board.FONT = pygame.font.Font(None, 50)
+        #Board.FONT = pygame.font.Font(None, 50)
         self.reset()
 
     def reset(self):
@@ -407,7 +338,7 @@ class Board:
         # Play
         self.grid[grid_index] = self.currentPlayer
         move = [self.possible.copy(), grid_index]
-        self.reward.update_playing_on(large_index, grid_index)
+        #self.reward.update_playing_on(large_index, grid_index)
 
         # Check if a cell or the game is won
         self.checkWinLargeCell(large_index, move)
@@ -428,44 +359,8 @@ class Board:
         # Everything went fine
         return 0, move
 
-    def play_ultra_fast(self, ixLarge, iyLarge, ixSmall, iySmall): #play but do not update reward
-        '''
-        Attempts to play for the current player in the given cell
-        Input: ixLarge, iyLarge, ixSmall, iySmall (indexes of the small cell)
-        Output: Error number
-            - 0: everything went fine
-            - 1: the game is not running (not initiated or already won)
-            - 2: the player cannot play in the desired large cell
-            - 3: the desired small cell is not available (already occupied)
-        Move played (to reverse)
-        '''
-        large_index = Board.getLargeIndex(ixLarge, iyLarge)
-        grid_index = Board.getIndex(ixLarge,iyLarge,ixSmall,iySmall)
-        if self.state != 0:
-            return 1, None # Move not aload since the game is already finished
-        if not(large_index in self.possible):
-            return 2, None # Move not aload since not in the correct large cell
-        elif self.grid[grid_index] != 0:
-            return 3, None # Move not aload since the small cell is already occupied
 
-        self.reward.reset()
-
-        # Play
-        self.grid[grid_index] = self.currentPlayer
-
-        # Check if a cell or the game is won
-        self.checkWinLargeCell(large_index, None, True)
-
-        # Update possibilities
-        self.updatePossible(ixSmall, iySmall)
-
-        # Update player
-        self.currentPlayer = 3 - self.currentPlayer # Swap player
-
-        # Everything went fine
-        return 0
-
-    def checkWinLargeCell(self, large_index, move, fast = False):
+    def checkWinLargeCell(self, large_index, move):
         '''
         Checks if a player won the large cell queried. If so, it also checks if the player globally won the game
         Input: ix, iy (indexes of the large cell)
@@ -475,23 +370,21 @@ class Board:
             # Win lage cell
             self.largeGrid[large_index] = res
             
-            if not(fast):
-                self.reward.update_winning_large_cell(large_index)
-                move.append(large_index)
+            self.reward.update_winning_large_cell(large_index)
+            move.append(large_index)
 
             # Check if the game was won
             resWin = Board.checkWinBoard(self.largeGrid)
             if resWin != 0: # A player won
                 self.state = resWin
 
-                if not(fast):
-                    self.reward.update_winning()
+                self.reward.update_winning()
 
-                    # Display winning message
-                    self.textColor = Board.COLOR_PLAYER_2
-                    if resWin == 1:
-                        self.textColor = Board.COLOR_PLAYER_1
-                    self.text = "Player " + str(self.state) + " won !"
+                # Display winning message
+                self.textColor = Board.COLOR_PLAYER_2
+                if resWin == 1:
+                    self.textColor = Board.COLOR_PLAYER_1
+                self.text = "Player " + str(self.state) + " won !"
 
     def updatePossible(self, ix, iy):
         '''
@@ -522,7 +415,7 @@ class Board:
                 continuer = True
                 while continuer and (i<9):
                     if self.grid[9*large_index + i] == 0:
-                        continer = False
+                        continuer = False
                         self.possible.append(large_index)
                     i += 1
 
@@ -556,19 +449,19 @@ class Board:
                     if large_index in self.possible:
                         if current_milli_time() % Board.TIME_BLINK_AVAILABLE > 0.5 * Board.TIME_BLINK_AVAILABLE:
                             color = Board.COLOR_BACKGROUND_AVAILABLE
-                pygame.draw.rect(screen, color, (pos[0], pos[1], s, s))
+                #pygame.draw.rect(screen, color, (pos[0], pos[1], s, s))
 
         # Small grid lines
         for i in range(10):
             pos = 0.5 * Board.WIDTH_LARGE_GRID + (Board.SIZE - Board.WIDTH_LARGE_GRID) * i / 9. - 1
-            pygame.draw.line(screen, Board.COLOR_SMALL_GRID, (pos,0), (pos,Board.SIZE), width = Board.WIDTH_SMALL_GRID) # Vertical
-            pygame.draw.line(screen, Board.COLOR_SMALL_GRID, (0,pos), (Board.SIZE,pos), width = Board.WIDTH_SMALL_GRID) # Horizontal
+            #pygame.draw.line(screen, Board.COLOR_SMALL_GRID, (pos,0), (pos,Board.SIZE), width = Board.WIDTH_SMALL_GRID) # Vertical
+            #pygame.draw.line(screen, Board.COLOR_SMALL_GRID, (0,pos), (Board.SIZE,pos), width = Board.WIDTH_SMALL_GRID) # Horizontal
 
         # Large grid lines
         for i in range(4):
             pos = Board.getLargeTopLeftPx(i,0)[0]
-            pygame.draw.line(screen, Board.COLOR_LARGE_GRID, (pos,0), (pos,Board.SIZE), width = Board.WIDTH_LARGE_GRID) # Vertical
-            pygame.draw.line(screen, Board.COLOR_LARGE_GRID, (0,pos), (Board.SIZE,pos), width = Board.WIDTH_LARGE_GRID) # Horizontal
+            #pygame.draw.line(screen, Board.COLOR_LARGE_GRID, (pos,0), (pos,Board.SIZE), width = Board.WIDTH_LARGE_GRID) # Vertical
+            #pygame.draw.line(screen, Board.COLOR_LARGE_GRID, (0,pos), (Board.SIZE,pos), width = Board.WIDTH_LARGE_GRID) # Horizontal
 
         # Draw player moves
         inc = 0.35 * Board.getSizeSmallCell()
@@ -579,17 +472,17 @@ class Board:
                         grid_index = Board.getIndex(ixLarge, iyLarge, ixSmall, iySmall)
                         gridValue = self.grid[grid_index]
                         pos = Board.getSmallMidddlePx(ixLarge, iyLarge, ixSmall, iySmall)
-                        if gridValue == 1: # Crosses
+                        """if gridValue == 1: # Crosses
                             pygame.draw.line(screen, Board.COLOR_PLAYER_1, (pos[0] - inc, pos[1] - inc), (pos[0] + inc, pos[1] + inc), width = Board.WIDTH_PLAYER_1)
                             pygame.draw.line(screen, Board.COLOR_PLAYER_1, (pos[0] - inc, pos[1] + inc), (pos[0] + inc, pos[1] - inc), width = Board.WIDTH_PLAYER_1)
                         elif gridValue == 2: # Circles
-                            pygame.draw.ellipse(screen, Board.COLOR_PLAYER_2, (pos[0] - inc, pos[1] - inc, 2*inc, 2*inc), width = Board.WIDTH_PLAYER_2)
+                            pygame.draw.ellipse(screen, Board.COLOR_PLAYER_2, (pos[0] - inc, pos[1] - inc, 2*inc, 2*inc), width = Board.WIDTH_PLAYER_2)"""
 
         # Text
-        pygame.draw.rect(screen, Board.COLOR_BACKGROUND, (0, Board.SIZE, Board.SIZE, Board.BOTTOM_SIZE))
+        """pygame.draw.rect(screen, Board.COLOR_BACKGROUND, (0, Board.SIZE, Board.SIZE, Board.BOTTOM_SIZE))
         text = Board.FONT.render(self.text, True, self.textColor)
         text_rect = text.get_rect(center=(Board.SIZE / 2., Board.SIZE + Board.BOTTOM_SIZE / 2.))
-        screen.blit(text, text_rect)
+        screen.blit(text, text_rect)"""
     # ========================================================= #
 
 
