@@ -15,7 +15,9 @@ class DQNetwork(torch.nn.Module):
         output_layer = torch.nn.Tanh() if output_range == (-1,1) else torch.nn.Sigmoid()
 
         self.network = torch.nn.Sequential(
-            torch.nn.Linear(state_len, 256),
+            torch.nn.Linear(state_len, 512),
+            torch.nn.ReLU(),
+            torch.nn.Linear(512, 256),
             torch.nn.ReLU(),
             torch.nn.Linear(256, 128),
             torch.nn.ReLU(),
@@ -26,7 +28,7 @@ class DQNetwork(torch.nn.Module):
         )
 
         self.optimizer = torch.optim.Adam(self.parameters(), lr = learning_rate)
-        #self.loss = torch.nn.MSELoss(reduction='mean')
+        self.loss = torch.nn.MSELoss(reduction='mean')
 
         self.transition = list()
 

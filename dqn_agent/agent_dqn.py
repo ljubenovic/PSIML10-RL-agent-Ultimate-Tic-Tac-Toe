@@ -120,7 +120,8 @@ class DQNAgent(Agent):
             target = (reward + gamma * next_q_value * (1-done)).to(self.q.device)
         curr_q_value = self.q(state).gather(1, action)  # prediction
         # calculate dqn loss
-        loss = torch.nn.functional.smooth_l1_loss(curr_q_value, target, reduction='mean')
+        #loss = torch.nn.functional.smooth_l1_loss(curr_q_value, target, reduction='mean')
+        loss = self.q.loss(curr_q_value, target)
 
         return loss
 
