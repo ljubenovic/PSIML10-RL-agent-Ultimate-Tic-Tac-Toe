@@ -27,6 +27,6 @@ if __name__ == '__main__':
 
     # Training parameters
     n_episodes = 500     # Number of episodes for training
-    n_save = 100          # saving the trained model every n_save episodes
+    n_save = 100         # Saving the trained model every n_save episodes
 
     agent = DQNAgent(env, epsilon, model_flag, masked, n_episodes, n_save, name, target_update, results_folder)
