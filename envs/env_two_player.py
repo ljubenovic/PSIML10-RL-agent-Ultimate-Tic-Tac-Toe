@@ -2,7 +2,6 @@ import gym
 from game.ultimatetictactoe import UltimateTicTacToe
 import numpy as np
 
-
 class TwoPlayerEnv(gym.Env):
 
     def __init__(self):
@@ -18,21 +17,12 @@ class TwoPlayerEnv(gym.Env):
 
     def step(self, action):
         self.pygame.do_action(action)
-        obs = self.pygame.observe()
+        (grid,largeGrid,possible) = self.pygame.observe()
         reward = self.pygame.evaluate()
         done = self.pygame.is_done()
-        return obs, reward, done, {}
-
-    def fast_step(self, action):
-        self.pygame.do_action(action)
-        reward = self.pygame.evaluate()
-        done = self.pygame.is_done()
-        return reward, done
-    
-    def ultra_fast_step(self, action): #does not compute reward
-        self.pygame.do_action_ultra_fast(action)
-        done = self.pygame.is_done()
-        return done        
+        possible = np.unique(possible)
+        obs = (grid, largeGrid, possible)
+        return obs, reward, done, {}   
 
     def render(self, mode="human", close=False):
         self.pygame.view(False)
